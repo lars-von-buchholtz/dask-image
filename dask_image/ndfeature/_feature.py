@@ -4,11 +4,11 @@ from scipy.ndimage import gaussian_filter, gaussian_laplace
 #from math import sqrt, log
 #from scipy import spatial
 from skimage import img_as_float
-from skimage.feature.peak import peak_local_max
+from skimage.feature.peak import peak_local_max as ski_peak_local_max
 #from ._hessian_det_appx import _hessian_matrix_det
 #from ..transform import integral_image
 #from .._shared.utils import check_nD
-
+from ..ndmeasure import labeled_comprehension
 
 
 
@@ -158,7 +158,7 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
     return _prune_blobs(lm, overlap, sigma_dim=sigma_dim)
 
 
-def peak_local_max(image, min_distance=1, threshold_abs=None,
+def _peak_local_max(image, min_distance=1, threshold_abs=None,
                    threshold_rel=None, exclude_border=True, indices=True,
                    num_peaks=np.inf, footprint=None, labels=None,
                    num_peaks_per_label=np.inf):
@@ -245,3 +245,30 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
     >>> peak_local_max(img2, exclude_border=0)
     array([[10, 10, 10]])
     """
+
+    # calculate depth and boundaries based on min_distance and/or footprint
+    if not (min_distance or footprint):
+        raise ValueError('Either min_distance or footprint must be specified')
+
+    depth = 2 * min_distance + 1
+    if footprint:
+        depth = footprint.shape
+
+    # map_overlap plm without border exclude, labels, indices=False
+    result = image.map_overlap(
+        ski_peak_local_max,
+        depth=depth,
+        min_distance=min_distance, threshold_abs=threshold_abs,
+        threshold_rel=threshold_rel, exclude_border=False, indices=False,
+        num_peaks=np.inf, footprint=footprint, labels=None,
+        num_peaks_per_label=np.inf
+    )
+
+    # if exclude_borders filter out points near borders
+    if type(exclude_border) == bool:
+        exclude_border = min_distance if exclude_border else 0
+
+    # if max number of indices check for that
+
+    #
+
