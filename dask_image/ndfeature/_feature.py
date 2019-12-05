@@ -7,10 +7,11 @@ import dask.array as da
 from skimage.feature.peak import peak_local_max as ski_peak_local_max
 from skimage.feature._hessian_det_appx import _hessian_matrix_det
 
-#from .._shared.utils import check_nD
-from ..ndfilters._gaussian import _get_sigmas, _get_border, gaussian_laplace
+# from .._shared.utils import check_nD
+from ..ndfilters._gaussian import gaussian_laplace, gaussian_filter
 from ._skimage_utils import _exclude_border, _prune_blobs
 from functools import wraps
+
 
 def _daskarray_to_float(image):
 
@@ -20,34 +21,37 @@ def _daskarray_to_float(image):
     kind_in = dtypeobj_in.kind
     itemsize_in = dtypeobj_in.itemsize
 
-
-    if kind_in == 'f':
+    if kind_in == "f":
         return image
 
-    if kind_in in 'ui':
+    if kind_in in "ui":
         imin_in = np.iinfo(dtype_in).min
         imax_in = np.iinfo(dtype_in).max
 
-    dtype_out = next(dt for dt in [np.float16,np.float32,np.float64] if np.dtype(dt).itemsize >= itemsize_in)
+    dtype_out = next(
+        dt
+        for dt in [np.float16, np.float32, np.float64]
+        if np.dtype(dt).itemsize >= itemsize_in
+    )
     image = image.astype(dtype_out)
 
-
-
-    if kind_in == 'u':
+    if kind_in == "u":
         # for unsigned integers, distribute between 0.0 and 1.0
-        image *= 1. / imax_in
+        image *= 1.0 / imax_in
 
     else:
         # for signed integers , distribute between
         image += 0.5
-        image *= 2. / (imax_in - imin_in)
+        image *= 2.0 / (imax_in - imin_in)
 
     return image
 
 
 def _get_high_intensity_peaks(image, mask, num_peaks):
     """
-    Return the highest intensity peak coordinates. Adapted from skimage.feature.peak._get_high_intensity_peaks
+    Return the highest intensity peak coordinates.
+
+    Adapted from skimage.feature.peak._get_high_intensity_peaks
     """
     # get coordinates of peaks
     coord = tuple([c.compute() for c in da.nonzero(mask)])
@@ -61,9 +65,17 @@ def _get_high_intensity_peaks(image, mask, num_peaks):
     # Highest peak first
     return coord[::-1]
 
-def peak_local_max(image, min_distance=1, threshold_abs=None,
-                   threshold_rel=None, exclude_border=True, indices=True,
-                   num_peaks=np.inf, footprint=None):
+
+def peak_local_max(
+    image,
+    min_distance=1,
+    threshold_abs=None,
+    threshold_rel=None,
+    exclude_border=True,
+    indices=True,
+    num_peaks=np.inf,
+    footprint=None,
+):
 
     """Find peaks in a dask image as coordinate list or boolean mask.
     Peaks are the local maxima in a region of `2 * min_distance + 1`
@@ -107,8 +119,10 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
     Returns
     -------
     output : ndarray or dask array of bools
-        * If `indices = True`  : (row, column, ...) coordinates of peaks as ndarray.
-        * If `indices = False` : Boolean dask array shaped like `image`, with peaks
+        * If `indices = True`  : (row, column, ...) coordinates of peaks as
+         ndarray.
+        * If `indices = False` : Boolean dask array shaped like `image`,
+        with peaks
           represented by True values.
     Notes
     -----
@@ -144,8 +158,7 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
 
     # calculate depth and boundaries based on min_distance and/or footprint
     if not (min_distance or footprint):
-        raise ValueError('Either min_distance or footprint must be specified')
-
+        raise ValueError("Either min_distance or footprint must be specified")
 
     if type(footprint) is np.ndarray:
         depth = footprint.shape
@@ -157,10 +170,15 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
     mask = image.map_overlap(
         ski_peak_local_max,
         depth=depth,
-        min_distance=min_distance, threshold_abs=threshold_abs,
-        threshold_rel=threshold_rel, exclude_border=False, indices=False,
-        num_peaks=np.inf, footprint=footprint, labels=None,
-        num_peaks_per_label=np.inf
+        min_distance=min_distance,
+        threshold_abs=threshold_abs,
+        threshold_rel=threshold_rel,
+        exclude_border=False,
+        indices=False,
+        num_peaks=np.inf,
+        footprint=footprint,
+        labels=None,
+        num_peaks_per_label=np.inf,
     )
 
     # if exclude_borders filter out points near borders
@@ -176,22 +194,32 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
     if indices is True:
         return coordinates
     else:
-        out = da.zeros_like(image,dtype=np.bool)
+        out = da.zeros_like(image, dtype=np.bool)
         nd_indices = tuple(coordinates.T)
         out[nd_indices] = True
         return out
 
 
-
 def blob_common(blob_func):
-    """Decorator for functionality that is conserved between blob_log and blob_dog"""
+    """Decorator for functionality that is conserved between blob_log and
+    blob_dog"""
 
     @wraps(blob_func)
-    def wrapped_func(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,overlap = 0.5,
-             log_scale=False, exclude_border=False):
+    def wrapped_func(
+        image,
+        min_sigma=1,
+        max_sigma=50,
+        num_sigma=10,
+        sigma_ratio=1.6,
+        threshold=0.2,
+        overlap=0.5,
+        log_scale=False,
+        exclude_border=False,
+    ):
 
         scalar_sigma = (
-            True if np.isscalar(max_sigma) and np.isscalar(min_sigma) else False
+            True if np.isscalar(max_sigma) and np.isscalar(min_sigma)
+            else False
         )
 
         # Gaussian filter requires that sequence-type sigmas have same
@@ -208,14 +236,22 @@ def blob_common(blob_func):
         #
         image = _daskarray_to_float(image)
 
+        image_stack, sigma_list = blob_func(
+            image=image,
+            min_sigma=min_sigma,
+            max_sigma=max_sigma,
+            num_sigma=num_sigma,
+            sigma_ratio=sigma_ratio,
+            log_scale=log_scale,
+        )
 
-        image_stack,sigma_list = blob_func(image=image, min_sigma=min_sigma, max_sigma=max_sigma,
-                                           num_sigma=num_sigma, log_scale=log_scale)
-
-        local_maxima = peak_local_max(image_stack, threshold_abs=threshold,
-                                       footprint=np.ones((3,) * (image.ndim + 1)),
-                                       threshold_rel=0.0,
-                                       exclude_border=exclude_border)
+        local_maxima = peak_local_max(
+            image_stack,
+            threshold_abs=threshold,
+            footprint=np.ones((3,) * (image.ndim + 1)),
+            threshold_rel=0.0,
+            exclude_border=exclude_border,
+        )
 
         # Catch no peaks
         if local_maxima.size == 0:
@@ -228,7 +264,6 @@ def blob_common(blob_func):
         # sigma that produced the maximum intensity value, into the sigma
         sigmas_of_peaks = sigma_list[local_maxima[:, -1]]
 
-
         if scalar_sigma:
             # select one sigma column, keeping dimension
             sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
@@ -238,16 +273,13 @@ def blob_common(blob_func):
 
         sigma_dim = sigmas_of_peaks.shape[1]
 
-
         return _prune_blobs(lm, overlap, sigma_dim=sigma_dim)
 
     return wrapped_func
 
 
-
-
 @blob_common
-def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, log_scale=False):
+def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale):
     r"""Finds blobs in the given grayscale image.
 
     This implementation adapts the skimage.feature.blob_log function for Dask.
@@ -257,8 +289,8 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, log_scale=False):
     Parameters
     ----------
     image : dask array
-        Input grayscale image as n-dimensional dask array, blobs are assumed to be light on dark
-        background (white on black).
+        Input grayscale image as n-dimensional dask array, blobs are assumed to
+        be light on dark background (white on black).
     min_sigma : scalar or sequence of scalars, optional
         the minimum standard deviation for Gaussian kernel. Keep this low to
         detect smaller blobs. The standard deviations of the Gaussian filter
@@ -289,15 +321,18 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, log_scale=False):
     Returns
     -------
     A : (m, image.ndim + sigma) ndarray
-        A 2d array with each row representing m coordinate values for a m-dimensional
-        image plus the sigma(s) used.
-        When a single sigma is passed both for min_sigma and max_sigma, the last column is the standard
-        deviation of the gaussian that detected the blob resulting in an m * (n + 1) array.
-         When an anisotropic gaussian is used (sigmas per dimension), the detected
-        sigma is returned for each dimension resulting in an m * 2n array.
+        A 2d array with each row representing m coordinate values for a
+        m-dimensional image plus the sigma(s) used.
+        When a single sigma is passed both for min_sigma and max_sigma, the
+        last column is the standard deviation of the gaussian that detected the
+        blob resulting in an m * (n + 1) array.
+        When an anisotropic gaussian is used (sigmas per dimension), the
+        detected sigma is returned for each dimension resulting in an m * 2n
+        array.
     References
     ----------
-    .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_Laplacian_of_Gaussian
+    ..[1] https://en.wikipedia.org/wiki/Blob_detection#The_Laplacian_
+    of_Gaussian
     Examples
     --------
     >>> from skimage import data, exposure
@@ -346,12 +381,110 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, log_scale=False):
 
     image_stack = da.stack(gl_images, axis=-1)
     chunk_shape = image_stack.chunks
-    new_shape = chunk_shape[:-1] +((sum(chunk_shape[-1]),),)
+    new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
     image_stack = image_stack.rechunk(chunks=new_shape)
 
-    return image_stack,sigma_list
+    return image_stack, sigma_list
 
 
+def blob_dog(image, min_sigma, max_sigma, sigma_ratio):
+    r"""Finds blobs in the given grayscale image.
+    Blobs are found using the Difference of Gaussian (DoG) method [1]_.
+    For each blob found, the method returns its coordinates and the standard
+    deviation of the Gaussian kernel that detected the blob.
+    Parameters
+    ----------
+    image : 2D or 3D ndarray
+        Input grayscale image, blobs are assumed to be light on dark
+        background (white on black).
+    min_sigma : scalar or sequence of scalars, optional
+        The minimum standard deviation for Gaussian kernel. Keep this low to
+        detect smaller blobs. The standard deviations of the Gaussian filter
+        are given for each axis as a sequence, or as a single number, in
+        which case it is equal for all axes.
+    max_sigma : scalar or sequence of scalars, optional
+        The maximum standard deviation for Gaussian kernel. Keep this high to
+        detect larger blobs. The standard deviations of the Gaussian filter
+        are given for each axis as a sequence, or as a single number, in
+        which case it is equal for all axes.
+    sigma_ratio : float, optional
+        The ratio between the standard deviation of Gaussian Kernels used for
+        computing the Difference of Gaussians
+    threshold : float, optional.
+        The absolute lower bound for scale space maxima. Local maxima smaller
+        than thresh are ignored. Reduce this to detect blobs with less
+        intensities.
+    overlap : float, optional
+        A value between 0 and 1. If the area of two blobs overlaps by a
+        fraction greater than `threshold`, the smaller blob is eliminated.
+    exclude_border : int or bool, optional
+        If nonzero int, `exclude_border` excludes blobs from
+        within `exclude_border`-pixels of the border of the image.
+    Returns
+    -------
+    A : (n, image.ndim + sigma) ndarray
+        A 2d array with each row representing 2 coordinate values for a 2D
+        image, and 3 coordinate values for a 3D image, plus the sigma(s) used.
+        When a single sigma is passed, outputs are:
+        ``(r, c, sigma)`` or ``(p, r, c, sigma)`` where ``(r, c)`` or
+        ``(p, r, c)`` are coordinates of the blob and ``sigma`` is the standard
+        deviation of the Gaussian kernel which detected the blob. When an
+        anisotropic gaussian is used (sigmas per dimension), the detected sigma
+        is returned for each dimension.
+    References
+    ----------
+    .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_difference_of_
+    Gaussians_approach
+    Examples
+    --------
+    >>> from skimage import data, feature
+    >>> feature.blob_dog(data.coins(), threshold=.5, max_sigma=40)
+    array([[267.      , 359.      ,  16.777216],
+           [267.      , 115.      ,  10.48576 ],
+           [263.      , 302.      ,  16.777216],
+           [263.      , 245.      ,  16.777216],
+           [261.      , 173.      ,  16.777216],
+           [260.      ,  46.      ,  16.777216],
+           [198.      , 155.      ,  10.48576 ],
+           [196.      ,  43.      ,  10.48576 ],
+           [195.      , 102.      ,  16.777216],
+           [194.      , 277.      ,  16.777216],
+           [193.      , 213.      ,  16.777216],
+           [185.      , 347.      ,  16.777216],
+           [128.      , 154.      ,  10.48576 ],
+           [127.      , 102.      ,  10.48576 ],
+           [125.      , 208.      ,  10.48576 ],
+           [125.      ,  45.      ,  16.777216],
+           [124.      , 337.      ,  10.48576 ],
+           [120.      , 272.      ,  16.777216],
+           [ 58.      , 100.      ,  10.48576 ],
+           [ 54.      , 276.      ,  10.48576 ],
+           [ 54.      ,  42.      ,  16.777216],
+           [ 52.      , 216.      ,  16.777216],
+           [ 52.      , 155.      ,  16.777216],
+           [ 45.      , 336.      ,  16.777216]])
+    Notes
+    -----
+    The radius of each blob is approximately :math:`\sqrt{2}\sigma` for
+    a 2-D image and :math:`\sqrt{3}\sigma` for a 3-D image.
+    """
 
+    # k such that min_sigma*(sigma_ratio**k) > max_sigma
+    k = int(np.mean(np.log(max_sigma / min_sigma) / np.log(sigma_ratio) + 1))
 
+    # a geometric progression of standard deviations for gaussian kernels
+    sigma_list = np.array([min_sigma * (sigma_ratio ** i)
+                           for i in range(k + 1)])
 
+    gaussian_images = [gaussian_filter(image, s) for s in sigma_list]
+
+    # computing difference between two successive Gaussian blurred images
+    # multiplying with average standard deviation provides scale invariance
+    dog_images = [
+        (gaussian_images[i] - gaussian_images[i + 1]) * np.mean(sigma_list[i])
+        for i in range(k)
+    ]
+
+    image_stack = np.stack(dog_images, axis=-1)
+
+    return image_stack, sigma_list

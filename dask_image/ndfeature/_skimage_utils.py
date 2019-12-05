@@ -2,6 +2,7 @@ import numpy as np
 import math
 from scipy import spatial
 
+
 def _compute_disk_overlap(d, r1, r2):
     """
     Compute fraction of surface overlap between two disks of radii
@@ -126,8 +127,9 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
     ----------
     blobs_array : ndarray
         A 2d array with each row representing a blob in n-dimensional space,
-        with the first n columns representing coordinates of the blob and the last ``sigma_dim`` columns
-        representing the standard deviation of the Gaussian kernel which detected the blob.
+        with the first n columns representing coordinates of the blob and the
+        last ``sigma_dim`` columns representing the standard deviation of the
+        Gaussian kernel which detected the blob.
         This array must not have a dimension of size 0.
     overlap : float
         A value between 0 and 1. If the fraction of area overlapping for 2
@@ -160,7 +162,6 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
     return np.array([b for b in blobs_array if b[-1] > 0])
 
 
-
 def _exclude_border(mask, footprint, exclude_border):
     """
     Remove peaks near the borders
@@ -172,6 +173,3 @@ def _exclude_border(mask, footprint, exclude_border):
         mask[(slice(None),) * i + (slice(None, remove // 2),)] = False
         mask[(slice(None),) * i + (slice(-remove // 2, None),)] = False
     return mask
-
-
-
