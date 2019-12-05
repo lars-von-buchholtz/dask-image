@@ -14,6 +14,7 @@ from skimage.feature._hessian_det_appx import _hessian_matrix_det
 from ..ndmeasure import labeled_comprehension
 from ..ndfilters._gaussian import _get_sigmas, _get_border, gaussian_laplace
 from ..ndfilters import _utils
+from ._skimage_utils import _exclude_border, _prune_blobs
 
 def _get_high_intensity_peaks(image, mask, num_peaks):
     """
@@ -150,6 +151,66 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
         nd_indices = tuple(coordinates.T)
         out[nd_indices] = True
         return out
+
+
+
+def blob_common(blob_func):
+    """Decorator for functionality that is conserved between blob_log and blob_dog"""
+    @wraps(blob_func)
+    def wrapped_func(*args, **kwargs)
+        image = kwargs['image'] if 'image' in kwargs else args[0]
+        min_sigma = kwargs['min_sigma'] if 'min_sigma' in kwargs else args[1]
+        max_sigma = kwargs['max_sigma'] if 'max_sigma' in kwargs else args[2]
+
+        scalar_sigma = (
+            True if np.isscalar(max_sigma) and np.isscalar(min_sigma) else False
+        )
+
+        # Gaussian filter requires that sequence-type sigmas have same
+        # dimensionality as image. This broadcasts scalar kernels
+        if np.isscalar(max_sigma):
+            max_sigma = np.full(image.ndim, max_sigma, dtype=float)
+        if np.isscalar(min_sigma):
+            min_sigma = np.full(image.ndim, min_sigma, dtype=float)
+
+        # Convert sequence types to array
+        min_sigma = np.asarray(min_sigma, dtype=float)
+        max_sigma = np.asarray(max_sigma, dtype=float)
+
+        #
+        kwargs['image'] = _daskarray_to_float(image)
+        image_stack = blob_func(*args,**kwargs)
+        local_maxima = peak_local_max(image_stack, threshold_abs=kwargs['threshold'],
+                                       footprint=np.ones((3,) * (image.ndim + 1)),
+                                       threshold_rel=0.0,
+                                       exclude_border=kwargs['exclude_border'])
+
+        # Catch no peaks
+        if local_maxima.size == 0:
+            return np.empty((0, 3))
+
+        # Convert local_maxima to float64
+        lm = local_maxima.astype(np.float64)
+
+        # translate final column of lm, which contains the index of the
+        # sigma that produced the maximum intensity value, into the sigma
+        sigmas_of_peaks = sigma_list[local_maxima[:, -1]]
+
+
+        if scalar_sigma:
+            # select one sigma column, keeping dimension
+            sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
+
+        # Remove sigma index and replace with sigmas
+        lm = np.hstack([lm[:, :-1], sigmas_of_peaks])
+
+        sigma_dim = sigmas_of_peaks.shape[1]
+
+        return _prune_blobs(lm, kwargs['overlap'], sigma_dim=sigma_dim)
+
+    return wrapped_func
+
+
 
 
 
