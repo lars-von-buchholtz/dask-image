@@ -279,7 +279,7 @@ def blob_common(blob_func):
 
 
 @blob_common
-def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale):
+def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,sigma_ratio = 1.6):
     r"""Finds blobs in the given grayscale image.
 
     This implementation adapts the skimage.feature.blob_log function for Dask.
@@ -386,8 +386,8 @@ def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale):
 
     return image_stack, sigma_list
 
-
-def blob_dog(image, min_sigma, max_sigma, sigma_ratio):
+@blob_common
+def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=False):
     r"""Finds blobs in the given grayscale image.
     Blobs are found using the Difference of Gaussian (DoG) method [1]_.
     For each blob found, the method returns its coordinates and the standard
