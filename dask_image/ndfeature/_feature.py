@@ -15,6 +15,21 @@ from ..ndmeasure import labeled_comprehension
 from ..ndfilters._gaussian import _get_sigmas, _get_border, gaussian_laplace
 from ..ndfilters import _utils
 
+def _get_high_intensity_peaks(image, mask, num_peaks):
+    """
+    Return the highest intensity peak coordinates. Adapted from skimage.feature.peak._get_high_intensity_peaks
+    """
+    # get coordinates of peaks
+    coord = tuple([c.compute() for c in da.nonzero(mask)])
+    # select num_peaks peaks
+    if len(coord[0]) > num_peaks:
+        intensities = image[coord]
+        idx_maxsort = np.argsort(intensities)
+        coord = np.transpose(coord)[idx_maxsort][-num_peaks:]
+    else:
+        coord = np.column_stack(coord)
+    # Highest peak first
+    return coord[::-1]
 
 def peak_local_max(image, min_distance=1, threshold_abs=None,
                    threshold_rel=None, exclude_border=True, indices=True,
@@ -72,7 +87,7 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
     This operation dilates the original image. After comparison of the dilated
     and original image, this function returns the coordinates or a mask of the
     peaks where the dilated image equals the original image.
-   
+
     Examples
     --------
     >>> img1 = np.zeros((7, 7))
@@ -135,6 +150,7 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
         nd_indices = tuple(coordinates.T)
         out[nd_indices] = True
         return out
+
 
 
 def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
@@ -258,7 +274,7 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
     new_shape = chunk_shape[:-1] +((sum(chunk_shape[-1]),),)
     image_cube = image_cube.rechunk(chunks=new_shape)
 
-    local_maxima = _peak_local_max(image_cube, threshold_abs=threshold,
+    local_maxima = peak_local_max(image_cube, threshold_abs=threshold,
                                   footprint=np.ones((3,) * (image.ndim + 1)),
                                   threshold_rel=0.0,
                                   exclude_border=exclude_border)
