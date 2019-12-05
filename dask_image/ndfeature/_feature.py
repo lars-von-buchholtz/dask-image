@@ -15,6 +15,40 @@ from ..ndmeasure import labeled_comprehension
 from ..ndfilters._gaussian import _get_sigmas, _get_border, gaussian_laplace
 from ..ndfilters import _utils
 from ._skimage_utils import _exclude_border, _prune_blobs
+from functools import wraps
+
+def _daskarray_to_float(image):
+
+    image = da.asarray(image)
+    dtypeobj_in = image.dtype
+    dtype_in = dtypeobj_in.type
+    kind_in = dtypeobj_in.kind
+    itemsize_in = dtypeobj_in.itemsize
+
+
+    if kind_in == 'f':
+        return image
+
+    if kind_in in 'ui':
+        imin_in = np.iinfo(dtype_in).min
+        imax_in = np.iinfo(dtype_in).max
+
+    dtype_out = next(dt for dt in [np.float16,np.float32,np.float64] if np.dtype(dt).itemsize >= itemsize_in)
+    image = image.astype(dtype_out)
+
+
+
+    if kind_in == 'u':
+        # for unsigned integers, distribute between 0.0 and 1.0
+        image *= 1. / imax_in
+
+    else:
+        # for signed integers , distribute between
+        image += 0.5
+        image *= 2. / (imax_in - imin_in)
+
+    return image
+
 
 def _get_high_intensity_peaks(image, mask, num_peaks):
     """
@@ -157,7 +191,7 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
 def blob_common(blob_func):
     """Decorator for functionality that is conserved between blob_log and blob_dog"""
     @wraps(blob_func)
-    def wrapped_func(*args, **kwargs)
+    def wrapped_func(*args, **kwargs):
         image = kwargs['image'] if 'image' in kwargs else args[0]
         min_sigma = kwargs['min_sigma'] if 'min_sigma' in kwargs else args[1]
         max_sigma = kwargs['max_sigma'] if 'max_sigma' in kwargs else args[2]
@@ -179,7 +213,10 @@ def blob_common(blob_func):
 
         #
         kwargs['image'] = _daskarray_to_float(image)
-        image_stack = blob_func(*args,**kwargs)
+
+
+        image_stack,sigma_list = blob_func(*args,**kwargs)
+
         local_maxima = peak_local_max(image_stack, threshold_abs=kwargs['threshold'],
                                        footprint=np.ones((3,) * (image.ndim + 1)),
                                        threshold_rel=0.0,
@@ -270,7 +307,8 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
     .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_Laplacian_of_Gaussian
     Examples
     --------
-    >>> from skimage import data, feature, exposure
+    >>> from skimage import data, exposure
+    >>> from dask_image import
     >>> img = data.coins()
     >>> img = exposure.equalize_hist(img)  # improves detection
     >>> feature.blob_log(img, threshold = .3)
@@ -296,24 +334,6 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
     The radius of each blob is approximately :math:`\sqrt{2}\sigma` for
     a 2-D image and :math:`\sqrt{3}\sigma` for a 3-D image.
     """
-    #image = img_as_float(image) #check this out
-
-    # if both min and max sigma are scalar, function returns only one sigma
-    scalar_sigma = (
-        True if np.isscalar(max_sigma) and np.isscalar(min_sigma) else False
-    )
-
-    # Gaussian filter requires that sequence-type sigmas have same
-    # dimensionality as image. This broadcasts scalar kernels
-    if np.isscalar(max_sigma):
-        max_sigma = np.full(image.ndim, max_sigma, dtype=float)
-    if np.isscalar(min_sigma):
-        min_sigma = np.full(image.ndim, min_sigma, dtype=float)
-
-    # Convert sequence types to array
-    min_sigma = np.asarray(min_sigma, dtype=float)
-    max_sigma = np.asarray(max_sigma, dtype=float)
-
     if log_scale:
         # for anisotropic data, we use the "highest resolution/variance" axis
         standard_axis = np.argmax(min_sigma)
@@ -330,37 +350,13 @@ def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
     gl_images = [-gaussian_laplace(image, s) * np.mean(s) ** 2
                  for s in sigma_list]
 
-    image_cube = da.stack(gl_images, axis=-1)
-    chunk_shape = image_cube.chunks
+    image_stack = da.stack(gl_images, axis=-1)
+    chunk_shape = image_stack.chunks
     new_shape = chunk_shape[:-1] +((sum(chunk_shape[-1]),),)
-    image_cube = image_cube.rechunk(chunks=new_shape)
+    image_stack = image_stack.rechunk(chunks=new_shape)
 
-    local_maxima = peak_local_max(image_cube, threshold_abs=threshold,
-                                  footprint=np.ones((3,) * (image.ndim + 1)),
-                                  threshold_rel=0.0,
-                                  exclude_border=exclude_border)
+    return image_stack,sigma_list
 
-    # Catch no peaks
-    if local_maxima.size == 0:
-        return np.empty((0, 3))
-
-    # Convert local_maxima to float64
-    lm = local_maxima.astype(np.float64)
-
-    # translate final column of lm, which contains the index of the
-    # sigma that produced the maximum intensity value, into the sigma
-    sigmas_of_peaks = sigma_list[local_maxima[:, -1]]
-
-    if scalar_sigma:
-        # select one sigma column, keeping dimension
-        sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
-
-    # Remove sigma index and replace with sigmas
-    lm = np.hstack([lm[:, :-1], sigmas_of_peaks])
-
-    sigma_dim = sigmas_of_peaks.shape[1]
-
-    return _prune_blobs(lm, overlap, sigma_dim=sigma_dim)
 
 
 
