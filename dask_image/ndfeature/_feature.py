@@ -185,11 +185,10 @@ def peak_local_max(image, min_distance=1, threshold_abs=None,
 
 def blob_common(blob_func):
     """Decorator for functionality that is conserved between blob_log and blob_dog"""
+
     @wraps(blob_func)
-    def wrapped_func(*args, **kwargs):
-        image = kwargs['image'] if 'image' in kwargs else args[0]
-        min_sigma = kwargs['min_sigma'] if 'min_sigma' in kwargs else args[1]
-        max_sigma = kwargs['max_sigma'] if 'max_sigma' in kwargs else args[2]
+    def wrapped_func(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,overlap = 0.5,
+             log_scale=False, exclude_border=False):
 
         scalar_sigma = (
             True if np.isscalar(max_sigma) and np.isscalar(min_sigma) else False
@@ -207,15 +206,16 @@ def blob_common(blob_func):
         max_sigma = np.asarray(max_sigma, dtype=float)
 
         #
-        kwargs['image'] = _daskarray_to_float(image)
+        image = _daskarray_to_float(image)
 
 
-        image_stack,sigma_list = blob_func(*args,**kwargs)
+        image_stack,sigma_list = blob_func(image=image, min_sigma=min_sigma, max_sigma=max_sigma,
+                                           num_sigma=num_sigma, log_scale=log_scale)
 
-        local_maxima = peak_local_max(image_stack, threshold_abs=kwargs['threshold'],
+        local_maxima = peak_local_max(image_stack, threshold_abs=threshold,
                                        footprint=np.ones((3,) * (image.ndim + 1)),
                                        threshold_rel=0.0,
-                                       exclude_border=kwargs['exclude_border'])
+                                       exclude_border=exclude_border)
 
         # Catch no peaks
         if local_maxima.size == 0:
@@ -238,7 +238,8 @@ def blob_common(blob_func):
 
         sigma_dim = sigmas_of_peaks.shape[1]
 
-        return _prune_blobs(lm, kwargs['overlap'], sigma_dim=sigma_dim)
+
+        return _prune_blobs(lm, overlap, sigma_dim=sigma_dim)
 
     return wrapped_func
 
@@ -246,8 +247,7 @@ def blob_common(blob_func):
 
 
 @blob_common
-def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, threshold=.2,
-             overlap=.5, log_scale=False, *, exclude_border=False):
+def blob_log(image, min_sigma=1, max_sigma=50, num_sigma=10, log_scale=False):
     r"""Finds blobs in the given grayscale image.
 
     This implementation adapts the skimage.feature.blob_log function for Dask.
