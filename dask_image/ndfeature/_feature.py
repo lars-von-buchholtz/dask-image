@@ -245,6 +245,10 @@ def blob_common(blob_func):
             log_scale=log_scale,
         )
 
+        chunk_shape = image_stack.chunks
+        new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
+        image_stack = image_stack.rechunk(chunks=new_shape)
+
         local_maxima = peak_local_max(
             image_stack,
             threshold_abs=threshold,
@@ -380,9 +384,6 @@ def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,sigma_ratio = 1.6
                  for s in sigma_list]
 
     image_stack = da.stack(gl_images, axis=-1)
-    chunk_shape = image_stack.chunks
-    new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
-    image_stack = image_stack.rechunk(chunks=new_shape)
 
     return image_stack, sigma_list
 
