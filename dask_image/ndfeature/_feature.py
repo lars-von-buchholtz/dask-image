@@ -7,11 +7,18 @@ import dask.array as da
 from skimage.feature.peak import peak_local_max as ski_peak_local_max
 from skimage.feature._hessian_det_appx import _hessian_matrix_det
 
-# from .._shared.utils import check_nD
 from ..ndfilters._gaussian import gaussian_laplace, gaussian_filter
 from ._skimage_utils import _exclude_border, _prune_blobs
 from functools import wraps
 from skimage.transform import integral_image
+
+def output2ndarray(func):
+    @wraps(func)
+    def wrapped(*args,**kwargs):
+        return np.asarray(func(*args,**kwargs))
+    return wrapped
+
+_hessian_matrix_det = output2ndarray(_hessian_matrix_det)
 
 def _daskarray_to_float(image):
 
@@ -168,7 +175,6 @@ def peak_local_max(
         depth = 2 * min_distance + 1
 
     # map_overlap plm without border exclude, labels, indices=False
-    print(image.chunks)
     mask = image.map_overlap(
         ski_peak_local_max,
         depth=depth,
@@ -581,21 +587,18 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
         sigma_list = np.logspace(start, stop, num_sigma)
     else:
         sigma_list = np.linspace(min_sigma, max_sigma, num_sigma)
-    print(sigma_list)
-    print(max_sigma)
+
     # implement with mask overlap (depth max_sigma * sqrt(2)
-    depth = (int(np.ceil(max_sigma*math.sqrt(image.ndim))),) * 2
-    print(depth)
-    def doh(image,sigma):
-        result = image.map_overlap(
+    depth = int(np.ceil(max_sigma*math.sqrt(image.ndim)))
+
+
+
+    hessian_images = [image.map_overlap(
             _hessian_matrix_det,
             depth=depth,
-            sigma=sigma,
+            sigma=s,
             dtype=image.dtype
-        )
-        return result
-
-    hessian_images = [doh(image,s) for s in sigma_list]
+        ) for s in sigma_list]
 
     image_stack = da.dstack(hessian_images)
 
