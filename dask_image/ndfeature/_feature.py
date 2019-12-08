@@ -165,7 +165,7 @@ def peak_local_max(
     array([[10, 10, 10]])
     """
 
-    # calculate depth and boundaries based on min_distance and/or footprint
+    # calculate depth based on min_distance and/or footprint
     if not (min_distance or footprint):
         raise ValueError("Either min_distance or footprint must be specified")
 
@@ -260,7 +260,7 @@ def blob_common(blob_func):
         local_maxima = peak_local_max(
             image_stack,
             threshold_abs=threshold,
-            footprint=np.ones((3,) * (image.ndim + 1)),
+            footprint=np.ones((3,) * image.ndim + (1,)),
             threshold_rel=0.0,
             exclude_border=exclude_border,
         )
