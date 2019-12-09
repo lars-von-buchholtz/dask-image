@@ -8,7 +8,7 @@ from skimage.feature.peak import peak_local_max as ski_peak_local_max
 from skimage.feature._hessian_det_appx import _hessian_matrix_det
 
 from ..ndfilters._gaussian import gaussian_laplace, gaussian_filter
-from ._skimage_utils import _exclude_border, _prune_blobs
+from ._skimage_utils import _prune_blobs
 from functools import wraps
 from skimage.transform import integral_image
 
@@ -52,6 +52,28 @@ def _daskarray_to_float(image):
         image *= 2.0 / (imax_in - imin_in)
 
     return image
+
+
+def _exclude_border(mask, exclude_border):
+    """
+    Remove peaks near the borders
+    """
+
+    exclude_border = (exclude_border,) * mask.ndim if np.isscalar(
+        exclude_border) \
+        else exclude_border
+
+    if len(exclude_border) != mask.ndim:
+        raise ValueError("exclude_border has to be boolean, int scalar\
+         or a sequence of length: number of dimensions of the image")
+
+    center_dim = tuple(np.subtract(mask.shape, [2 * i for i in exclude_border]))
+    borders = tuple([(i,) * 2 for i in exclude_border])
+    border_filter = da.pad(da.ones(center_dim), borders, 'constant')
+
+    assert border_filter.shape == mask.shape
+
+    return mask * border_filter
 
 
 def _get_high_intensity_peaks(image, mask, num_peaks):
@@ -108,10 +130,12 @@ def peak_local_max(
         the minimum intensity of the image.
     threshold_rel : float, optional
         Minimum intensity of peaks, calculated as `max(image) * threshold_rel`.
-    exclude_border : int or bool, optional
+    exclude_border : int, bool, or sequence of int, optional
         If nonzero int, `exclude_border` excludes peaks from
         within `exclude_border`-pixels of the border of the image.
         If True, takes the `min_distance` parameter as value.
+        If Sequence of ints, excluded pixels can be defined for each image
+        dimension independently.
         If zero or False, peaks are identified regardless of their
         distance from the border.
     indices : bool, optional
@@ -124,7 +148,7 @@ def peak_local_max(
     footprint : ndarray of bools, optional
         If provided, `footprint == 1` represents the local region within which
         to search for peaks at every point in `image`.  Overrides
-        `min_distance` (also for `exclude_border`).
+        `min_distance`.
     Returns
     -------
     output : ndarray or dask array of bools
@@ -194,7 +218,7 @@ def peak_local_max(
         exclude_border = min_distance if exclude_border else 0
 
     if exclude_border:
-        mask = _exclude_border(mask, footprint, exclude_border)
+        mask = _exclude_border(mask, exclude_border)
 
     # Select highest intensities (num_peaks)
     coordinates = _get_high_intensity_peaks(image, mask, num_peaks)
@@ -258,6 +282,7 @@ def blob_common(blob_func):
         image_stack = image_stack.rechunk(chunks=new_shape)
 
 
+        exclude_border = (exclude_border,) * image.ndim + (0,)
         local_maxima = peak_local_max(
             image_stack,
             threshold_abs=threshold,

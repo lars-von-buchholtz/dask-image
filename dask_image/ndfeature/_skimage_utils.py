@@ -162,14 +162,4 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
     return np.array([b for b in blobs_array if b[-1] > 0])
 
 
-def _exclude_border(mask, footprint, exclude_border):
-    """
-    Remove peaks near the borders
-    """
-    # zero out the image borders
-    for i in range(mask.ndim):
-        remove = (footprint.shape[i] if footprint is not None
-                  else 2 * exclude_border)
-        mask[(slice(None),) * i + (slice(None, remove // 2),)] = False
-        mask[(slice(None),) * i + (slice(-remove // 2, None),)] = False
-    return mask
+
