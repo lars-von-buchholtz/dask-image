@@ -169,11 +169,11 @@ def peak_local_max(
     if not (min_distance or footprint):
         raise ValueError("Either min_distance or footprint must be specified")
 
+    min_chunks = [min(d) for d in image.chunks]
     if type(footprint) is np.ndarray:
-        depth = footprint.shape
+        depth = tuple(np.minimum(footprint.shape,min_chunks).tolist())
     else:
-        depth = 2 * min_distance + 1
-
+        depth = tuple(np.minimum((2 * min_distance + 1,) * image.ndim,min_chunks).tolist())
     # map_overlap plm without border exclude, labels, indices=False
     mask = image.map_overlap(
         ski_peak_local_max,
@@ -257,10 +257,11 @@ def blob_common(blob_func):
         new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
         image_stack = image_stack.rechunk(chunks=new_shape)
 
+
         local_maxima = peak_local_max(
             image_stack,
             threshold_abs=threshold,
-            footprint=np.ones((3,) * image.ndim + (1,)),
+            footprint=np.ones((3,) * (image.ndim + 1)),
             threshold_rel=0.0,
             exclude_border=exclude_border,
         )
