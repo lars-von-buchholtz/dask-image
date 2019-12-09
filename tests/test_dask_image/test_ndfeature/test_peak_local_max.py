@@ -57,12 +57,14 @@ def test_peak_local_max_2d(shape,points,min_distance,footprint,threshold_abs,\
                           threshold_abs=threshold_abs,
                           threshold_rel=threshold_rel,
                           footprint=footprint,
-                          num_peaks=num_peaks),
+                          num_peaks=num_peaks,
+                          exclude_border=False),
                   da_plm(d, min_distance=min_distance,
                           threshold_abs=threshold_abs,
                           threshold_rel=threshold_rel,
                           footprint=footprint,
-                          num_peaks=num_peaks),
+                          num_peaks=num_peaks,
+                         exclude_border=False),
                   )
 
 
