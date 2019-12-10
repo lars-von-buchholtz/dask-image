@@ -83,25 +83,36 @@ def _get_high_intensity_peaks(image, mask, num_peaks):
     Adapted from skimage.feature.peak._get_high_intensity_peaks
     """
     # get coordinates of peaks
-    coord = tuple([c.compute() for c in da.nonzero(mask)])
+    coord = np.vstack([c.compute() for c in da.nonzero(mask)]).T
+
+    # sort by peak
+    intensities = get_multiple_pixels(image, coord)
+    idx_maxsort = np.argsort(intensities)
+    coord = coord[idx_maxsort]
+
     # select num_peaks peaks
-    if len(coord[0]) > num_peaks:
-        intensities = image[coord]
-        idx_maxsort = np.argsort(intensities)
-        coord = np.transpose(coord)[idx_maxsort][-num_peaks:]
-    else:
-        coord = np.column_stack(coord)
+    if coord.shape[0] > num_peaks:
+        coord = coord[-num_peaks:]
+
     # Highest peak first
     return coord[::-1]
 
+def get_multiple_pixels(image,coordinates):
+    """function to substitute fancy indexing in dask"""
+    results = []
+    for coord in coordinates:
+        results.append(image[tuple(coord)].compute())
+    return results
 
-
+def set_multiple_pixels(image,coordinates,value):
+    for coord in coordinates:
+        image[tuple(coord)] = value
+    return image
 
 def peak_local_max(
     image,
     min_distance=1,
-    threshold_abs=None,
-    threshold_rel=None,
+    threshold=None,
     exclude_border=True,
     indices=True,
     num_peaks=np.inf,
@@ -125,11 +136,9 @@ def peak_local_max(
         min_distance + 1` (i.e. peaks are separated by at least
         `min_distance`).
         To find the maximum number of peaks, use `min_distance=1`.
-    threshold_abs : float, optional
+    threshold : float, optional
         Minimum intensity of peaks. By default, the absolute threshold is
         the minimum intensity of the image.
-    threshold_rel : float, optional
-        Minimum intensity of peaks, calculated as `max(image) * threshold_rel`.
     exclude_border : int, bool, or sequence of int, optional
         If nonzero int, `exclude_border` excludes peaks from
         within `exclude_border`-pixels of the border of the image.
@@ -144,7 +153,8 @@ def peak_local_max(
         `image.shape` with peaks present at True elements.
     num_peaks : int, optional
         Maximum number of peaks. When the number of peaks exceeds `num_peaks`,
-        return `num_peaks` peaks based on highest peak intensity.
+        return `num_peaks` peaks based on highest peak intensity. Works only
+        if indices is True.
     footprint : ndarray of bools, optional
         If provided, `footprint == 1` represents the local region within which
         to search for peaks at every point in `image`.  Overrides
@@ -203,8 +213,7 @@ def peak_local_max(
         ski_peak_local_max,
         depth=depth,
         min_distance=min_distance,
-        threshold_abs=threshold_abs,
-        threshold_rel=threshold_rel,
+        threshold_abs=threshold,
         exclude_border=False,
         indices=False,
         num_peaks=np.inf,
@@ -221,15 +230,13 @@ def peak_local_max(
         mask = _exclude_border(mask, exclude_border)
 
     # Select highest intensities (num_peaks)
-    coordinates = _get_high_intensity_peaks(image, mask, num_peaks)
+    if indices is False:
+        return mask
 
-    if indices is True:
-        return coordinates
-    else:
-        out = da.zeros_like(image, dtype=np.bool)
-        nd_indices = tuple(coordinates.T)
-        out[nd_indices] = True
-        return out
+    coordinates = _get_high_intensity_peaks(image, mask, num_peaks)
+    return coordinates
+
+
 
 
 def blob_common(blob_func):
