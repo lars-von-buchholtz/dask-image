@@ -30,7 +30,7 @@ def make_img(shape, points):
         ((100, 200), None),
         ((100, 200), np.array([[50, 50, 0.7]])),
         ((100, 200), np.array([[50, 50, 0.7], [50, 150, 1.0]])),
-        ((100, 200), np.array([[50, 50, 1.0], [50, 150, 1.0], [50, 99, 1.0]])),
+        ((100, 200), np.array([[2, 2, 1.0], [50, 150, 1.0], [50, 99, 1.0]])),
         (
             (100, 200),
             np.array([[50, 50, 1.0],
@@ -52,7 +52,7 @@ def make_img(shape, points):
 @pytest.mark.parametrize("threshold_abs", [0.5, 0.75, 0.9])
 @pytest.mark.parametrize("num_peaks", [np.inf, 2])
 def test_peak_local_max_2d(
-    shape, points, min_distance, footprint, threshold_abs, num_peaks
+    shape, points, min_distance, footprint, threshold_abs, num_peaks,
 ):
     a = make_img(shape, points)
     chunks = [e // 2 for e in shape]

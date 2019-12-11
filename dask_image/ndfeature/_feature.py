@@ -74,6 +74,8 @@ def peak_local_max(
 
     Examples
     --------
+    >>> from dask_image.ndfeature import peak_local_max
+    >>> import dask.array as da
     >>> img1 = np.zeros((7, 7))
     >>> img1[3, 4] = 1
     >>> img1[3, 2] = 1.5
@@ -85,14 +87,16 @@ def peak_local_max(
            [0. , 0. , 0. , 0. , 0. , 0. , 0. ],
            [0. , 0. , 0. , 0. , 0. , 0. , 0. ],
            [0. , 0. , 0. , 0. , 0. , 0. , 0. ]])
-    >>> peak_local_max(img1, min_distance=1)
+    >>> dsk_img1 = da.from_array(img1)
+    >>> peak_local_max(dsk_img1, min_distance=1)
     array([[3, 4],
            [3, 2]])
-    >>> peak_local_max(img1, min_distance=2)
+    >>> peak_local_max(dsk_img1, min_distance=2)
     array([[3, 2]])
     >>> img2 = np.zeros((20, 20, 20))
     >>> img2[10, 10, 10] = 1
-    >>> peak_local_max(img2, exclude_border=0)
+    >>> dsk_img2 = da.from_array(img2)
+    >>> peak_local_max(dsk_img2, exclude_border=0)
     array([[10, 10, 10]])
     """
 
@@ -101,7 +105,7 @@ def peak_local_max(
         raise ValueError("Either min_distance or footprint must be specified")
 
     # get minimum chunk size along each axis as a lower bound for the depth
-    # of the overlap
+    # of the overlap on that axis
     min_chunks = [min(d) for d in image.chunks]
 
     if type(footprint) is np.ndarray:
@@ -160,7 +164,7 @@ def blob_common(blob_func):
         exclude_border=False,
     ):
 
-
+        # flag for all-scalar sigmas to format the output coordinates
         scalar_sigma = (
             True if np.isscalar(max_sigma) and np.isscalar(min_sigma)
             else False
@@ -196,8 +200,11 @@ def blob_common(blob_func):
         new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
         image_stack = image_stack.rechunk(chunks=new_shape)
 
-
+        # expand scalar exclude_border to the image dimension, not to the
+        # sigma dimension
         exclude_border = (exclude_border,) * image.ndim + (0,)
+
+        # get coordinates of local maxima in the transformed image
         local_maxima = peak_local_max(
             image_stack,
             threshold=threshold,
@@ -219,11 +226,13 @@ def blob_common(blob_func):
         if scalar_sigma:
             # select one sigma column, keeping dimension
             sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
+
         # Remove sigma index and replace with sigmas
         lm = np.hstack([lm[:, :-1], sigmas_of_peaks])
 
         sigma_dim = sigmas_of_peaks.shape[1]
 
+        # prune blobs that are too close together
         return _prune_blobs(lm, overlap, sigma_dim=sigma_dim)
 
     return wrapped_func
@@ -325,24 +334,29 @@ def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,sigma_ratio = 1.6
         scale = np.linspace(0, 1, num_sigma)[:, np.newaxis]
         sigma_list = scale * (max_sigma - min_sigma) + min_sigma
 
-    # computing gaussian laplace using dask image functions
+    # computing gaussian laplace using dask image for the sequence of sigmas
     # average s**2 provides scale invariance
     gl_images = [-gaussian_laplace(image, s) * np.mean(s) ** 2
                  for s in sigma_list]
 
+    #stack the transformed images for the different sigmas
     image_stack = da.stack(gl_images, axis=-1)
 
+    # we pass the stack of transformed images and the list of sigmas back
+    # to the wrapping function
     return image_stack, sigma_list
 
 @blob_common
 def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=False):
     r"""Finds blobs in the given grayscale image.
+
+    Adapted from skimage.feature.blog_dog
     Blobs are found using the Difference of Gaussian (DoG) method [1]_.
     For each blob found, the method returns its coordinates and the standard
     deviation of the Gaussian kernel that detected the blob.
     Parameters
     ----------
-    image : 2D or 3D ndarray
+    image : n-dimensional dask array
         Input grayscale image, blobs are assumed to be light on dark
         background (white on black).
     min_sigma : scalar or sequence of scalars, optional
@@ -370,15 +384,15 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=F
         within `exclude_border`-pixels of the border of the image.
     Returns
     -------
-    A : (n, image.ndim + sigma) ndarray
-        A 2d array with each row representing 2 coordinate values for a 2D
-        image, and 3 coordinate values for a 3D image, plus the sigma(s) used.
-        When a single sigma is passed, outputs are:
-        ``(r, c, sigma)`` or ``(p, r, c, sigma)`` where ``(r, c)`` or
-        ``(p, r, c)`` are coordinates of the blob and ``sigma`` is the standard
-        deviation of the Gaussian kernel which detected the blob. When an
-        anisotropic gaussian is used (sigmas per dimension), the detected sigma
-        is returned for each dimension.
+    A : (m, image.ndim + sigma) ndarray
+        A 2d array with each row representing m coordinate values for a
+        m-dimensional image plus the sigma(s) used.
+        When a single sigma is passed both for min_sigma and max_sigma, the
+        last column is the standard deviation of the gaussian that detected the
+        blob resulting in an m * (n + 1) array.
+        When an anisotropic gaussian is used (sigmas per dimension), the
+        detected sigma is returned for each dimension resulting in an m * 2n
+        array.
     References
     ----------
     .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_difference_of_
@@ -386,7 +400,9 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=F
     Examples
     --------
     >>> from skimage import data, feature
-    >>> feature.blob_dog(data.coins(), threshold=.5, max_sigma=40)
+    >>> import dask.array as da
+    >>> from dask_image.ndfeature import blob_dog
+    >>> blob_dog(da.from_array(data.coins()), threshold=.5, max_sigma=40)
     array([[267.      , 359.      ,  16.777216],
            [267.      , 115.      ,  10.48576 ],
            [263.      , 302.      ,  16.777216],
@@ -424,6 +440,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=F
     sigma_list = np.array([min_sigma * (sigma_ratio ** i)
                            for i in range(k + 1)])
 
+    # get gaussian-blurred transformed images for each sigma
     gaussian_images = [gaussian_filter(image, s) for s in sigma_list]
 
     # computing difference between two successive Gaussian blurred images
@@ -433,6 +450,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=F
         for i in range(k)
     ]
 
+    # stack transformed images along new sigma dimension
     image_stack = np.stack(dog_images, axis=-1)
 
     return image_stack, sigma_list
@@ -442,15 +460,15 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
              overlap=.5, log_scale=False):
     """Finds blobs in the given grayscale image.
 
-    Adapted for dask from scikit-image.feature.
+    Adapted for dask from scikit-image.feature.blob_doh
     Blobs are found using the Determinant of Hessian method [1]_. For each blob
     found, the method returns its coordinates and the standard deviation
     of the Gaussian Kernel used for the Hessian matrix whose determinant
     detected the blob. Determinant of Hessians is approximated using [2]_.
     Parameters
     ----------
-    image : 2D ndarray
-        Input grayscale image.Blobs can either be light on dark or vice versa.
+    image : 2D dask array
+        Input grayscale image. Blobs can either be light on dark or vice versa.
     min_sigma : float, optional
         The minimum standard deviation for Gaussian Kernel used to compute
         Hessian matrix. Keep this low to detect smaller blobs.
@@ -485,9 +503,10 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
            ftp://ftp.vision.ee.ethz.ch/publications/articles/eth_biwi_00517.pdf
     Examples
     --------
-    >>> from skimage import data, feature
-    >>> img = data.coins()
-    >>> feature.blob_doh(img)
+    >>> from skimage import data
+    >>> import dask.array as da
+    >>> from dask_image.ndfeature import blob_doh
+    >>> blob_dog(da.from_array(data.coins()))
     array([[270.        , 363.        ,  30.        ],
            [265.        , 113.        ,  23.55555556],
            [262.        , 243.        ,  23.55555556],
@@ -513,27 +532,28 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
     methods line :py:meth:`blob_dog` and :py:meth:`blob_log` the computation
     of Gaussians for larger `sigma` takes more time. The downside is that
     this method can't be used for detecting blobs of radius less than `3px`
-    due to the box filters used in the approximation of Hessian Determinant.
+    due to the box filters used in the approximation of Hessian Determinant
+    and that the algorithm is currently limited to 2 dimensions.
     """
 
+    # check that 2D limitation is met
     if image.ndim != 2:
         raise ValueError('Blob detection with determinant of hessian requires\
          2D array')
 
+    # get float integral image to compute determinant of hessian
     image = _daskarray_to_float(image)
     image = integral_image(image)
 
+    # get sequence of sigmas
     if log_scale:
         start, stop = math.log(min_sigma, 10), math.log(max_sigma, 10)
         sigma_list = np.logspace(start, stop, num_sigma)
     else:
         sigma_list = np.linspace(min_sigma, max_sigma, num_sigma)
 
-    # implement with mask overlap (depth max_sigma * sqrt(2)
+    # map hessian determinant cython function to array chunks
     depth = int(np.ceil(max_sigma*math.sqrt(image.ndim)))
-
-
-
     hessian_images = [image.map_overlap(
             _hessian_matrix_det,
             depth=depth,
@@ -541,12 +561,15 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
             dtype=image.dtype
         ) for s in sigma_list]
 
+    # stack transformed images
     image_stack = da.dstack(hessian_images)
 
+    # rechunk along sigma axis
     chunk_shape = image_stack.chunks
     new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
     image_stack = image_stack.rechunk(chunks=new_shape)
 
+    # get coordinates of local maxima in transformed stack
     local_maxima = peak_local_max(image_stack, threshold=threshold,
                                   footprint=np.ones((3,) * image_stack.ndim),
                                   exclude_border=False)
@@ -561,6 +584,7 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
     # Convert the last index to its corresponding scale value
     lm[:, -1] = sigma_list[local_maxima[:, -1]]
 
+    # prune blobs that are too close together
     return _prune_blobs(lm, overlap)
 
 
