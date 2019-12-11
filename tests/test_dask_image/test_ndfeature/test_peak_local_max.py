@@ -36,7 +36,7 @@ def make_img(shape, points):
                                                (np.int32, np.float32)
                                                ])
 def test_tofloat(in_type, out_type):
-    img = da.from_array(np.ones((5, 5), dtype=in_type),chunks='auto')
+    img = da.from_array(np.ones((5, 5), dtype=in_type), chunks='auto')
     img_out = _daskarray_to_float(img)
     assert img_out.dtype == out_type
 
