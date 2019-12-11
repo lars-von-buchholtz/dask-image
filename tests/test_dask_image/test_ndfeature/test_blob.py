@@ -18,7 +18,8 @@ assert dask
 
 
 def generate_blobimage(shape, blobs):
-    """function to generate blob images from an image shape and blob coordinates and sigmas
+    """function to generate blob images from an image shape and blob
+    coordinates and sigmas
 
     :param shape:shape of image to generate
     :param blobs: array with blob coordinates and sigma in last column"""
@@ -120,7 +121,7 @@ def test_blob_doh_2d(
     print(da_r)
     # coordinates are sometimes off by 1 when using the determinant
     coord_diff = (ski_r - da_r)[:, : a.ndim]
-    sigma_diff = (ski_r - da_r)[:, a.ndim :]
+    sigma_diff = (ski_r - da_r)[:, a.ndim:]
     assert np.all(coord_diff <= 1)
     assert np.all(np.abs(sigma_diff) <= 0.01)
 
@@ -187,7 +188,8 @@ def test_blob_dog_2d(
 @pytest.mark.parametrize("overlap", [0.1, 0.9])
 @pytest.mark.parametrize("log_scale", [True, False])
 def test_blob_log_2d(
-    shape, blobs, min_sigma, max_sigma, num_sigma, overlap, threshold, log_scale
+    shape, blobs, min_sigma, max_sigma, num_sigma, overlap, threshold,
+    log_scale
 ):
     a = generate_blobimage(shape, blobs)
     chunks = [e // 2 for e in shape]
@@ -215,4 +217,3 @@ def test_blob_log_2d(
     ski_r = sort_array(ski_r)
     da_r = sort_array(da_r)
     dau.assert_eq(ski_r, da_r)
-

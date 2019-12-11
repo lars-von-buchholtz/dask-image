@@ -99,7 +99,7 @@ def _get_high_intensity_peaks(image, mask, num_peaks):
     coord = tuple([c.compute() for c in da.nonzero(mask)])
 
     # sort by peak intensity
-    intensities = image.vindex[coord]
+    intensities = image.vindex[coord].compute()
     idx_maxsort = np.argsort(intensities)
     coord = np.vstack(coord).T[idx_maxsort]
 
