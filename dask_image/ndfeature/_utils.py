@@ -13,9 +13,10 @@ def output2ndarray(func):
     a memoryview"""
 
     @wraps(func)
-    def wrapped(*args,**kwargs):
-        return np.asarray(func(*args,**kwargs))
+    def wrapped(*args, **kwargs):
+        return np.asarray(func(*args, **kwargs))
     return wrapped
+
 
 # modify hessian determinant approximation function to output numpy array
 _hessian_matrix_det = output2ndarray(_hessian_matrix_det)
@@ -24,9 +25,9 @@ _hessian_matrix_det = output2ndarray(_hessian_matrix_det)
 def _daskarray_to_float(image):
     """helper function to convert dask integer arrays to float"""
 
-    image = da.asarray(image) # make sure image is a dask array
+    image = da.asarray(image)  # make sure image is a dask array
 
-    #get array type, kind and itemsize
+    # get array type, kind and itemsize
     dtypeobj_in = image.dtype
     dtype_in = dtypeobj_in.type
     kind_in = dtypeobj_in.kind
@@ -48,13 +49,12 @@ def _daskarray_to_float(image):
         if np.dtype(dt).itemsize >= itemsize_in
     )
 
-    #convert image to output format (float)
+    # convert image to output format (float)
     image = image.astype(dtype_out)
 
     if kind_in == "u":
         # for unsigned integers, distribute between 0.0 and 1.0
         image *= 1.0 / imax_in
-
     else:
         # for signed integers , distribute between -1.0 and 1.0
         image += 0.5
@@ -79,7 +79,8 @@ def _exclude_border(mask, exclude_border):
          or a sequence of length: number of dimensions of the image")
 
     # build a filter for the border by zero-padding a center dask array of ones
-    center_dim = tuple(np.subtract(mask.shape, [2 * i for i in exclude_border]))
+    center_dim = tuple(np.subtract(mask.shape,
+                                   [2 * i for i in exclude_border]))
     borders = tuple([(i,) * 2 for i in exclude_border])
     border_filter = da.pad(da.ones(center_dim), borders, 'constant')
 

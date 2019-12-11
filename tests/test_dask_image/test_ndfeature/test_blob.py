@@ -85,9 +85,9 @@ def test_blob_dog_3d(shape, chunks, blobs):
 )
 @pytest.mark.parametrize("min_sigma, max_sigma, num_sigma",
                          [(1, 10, 10), (2, 11, 10)])
-@pytest.mark.parametrize("threshold", [0.001, 0.9])
+@pytest.mark.parametrize("threshold", [0.01, 0.9])
 @pytest.mark.parametrize("overlap", [0.1])
-@pytest.mark.parametrize("log_scale", [True])
+@pytest.mark.parametrize("log_scale", [True, False])
 def test_blob_doh_2d(
     shape, blobs, min_sigma, max_sigma, num_sigma, overlap,
     threshold, log_scale
@@ -218,7 +218,8 @@ def test_blob_log_2d(
     da_r = sort_array(da_r)
     dau.assert_eq(ski_r, da_r)
 
+
 def test_2d_check():
-    img = np.ones((10,10,10))
+    img = np.ones((10, 10, 10))
     with pytest.raises(ValueError):
         da_feat.blob_doh(img)

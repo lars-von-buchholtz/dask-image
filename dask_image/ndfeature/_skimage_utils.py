@@ -122,7 +122,7 @@ def _blob_overlap(blob1, blob2, *, sigma_dim=1):
 
 
 def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
-    """Eliminated blobs with area overlap.
+    """Eliminate blobs with area overlap.
     Parameters
     ----------
     blobs_array : ndarray
@@ -141,6 +141,11 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
     -------
     A : ndarray
         `array` with overlapping blobs removed.
+
+    Note
+    -------
+    Overlapping blobs are only removed in 2D and 3D images. In more dimensions
+    all blobs are returned.
     """
     sigma = blobs_array[:, -sigma_dim:].max()
     distance = 2 * sigma * math.sqrt(blobs_array.shape[1] - sigma_dim)
@@ -160,6 +165,3 @@ def _prune_blobs(blobs_array, overlap, *, sigma_dim=1):
                     blob1[-1] = 0
 
     return np.array([b for b in blobs_array if b[-1] > 0])
-
-
-

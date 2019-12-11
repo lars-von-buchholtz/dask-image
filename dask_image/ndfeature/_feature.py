@@ -105,9 +105,10 @@ def peak_local_max(
     min_chunks = [min(d) for d in image.chunks]
 
     if type(footprint) is np.ndarray:
-        depth = tuple(np.minimum(footprint.shape,min_chunks).tolist())
+        depth = tuple(np.minimum(footprint.shape, min_chunks).tolist())
     else:
-        depth = tuple(np.minimum((2 * min_distance + 1,) * image.ndim,min_chunks).tolist())
+        depth = tuple(np.minimum((2 * min_distance + 1,) * image.ndim,
+                                 min_chunks).tolist())
 
     # map_overlap the skimage function to the dask array chunks
     mask = image.map_overlap(
@@ -137,8 +138,6 @@ def peak_local_max(
     # Output as coordinates: select the `num_peaks` highest intensities
     coordinates = _get_high_intensity_peaks(image, mask, num_peaks)
     return coordinates
-
-
 
 
 def blob_common(blob_func):
@@ -235,7 +234,8 @@ def blob_common(blob_func):
 
 
 @blob_common
-def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,sigma_ratio = 1.6):
+def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,
+             sigma_ratio=1.6):
     r"""Finds blobs in the given grayscale image.
 
     This implementation adapts the skimage.feature.blob_log function for Dask.
@@ -335,15 +335,17 @@ def blob_log(image, min_sigma, max_sigma, num_sigma, log_scale,sigma_ratio = 1.6
     gl_images = [-gaussian_laplace(image, s) * np.mean(s) ** 2
                  for s in sigma_list]
 
-    #stack the transformed images for the different sigmas
+    # stack the transformed images for the different sigmas
     image_stack = da.stack(gl_images, axis=-1)
 
     # we pass the stack of transformed images and the list of sigmas back
     # to the wrapping function
     return image_stack, sigma_list
 
+
 @blob_common
-def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=False):
+def blob_dog(image, min_sigma, max_sigma, sigma_ratio,
+             num_sigma=0, log_scale=False):
     r"""Finds blobs in the given grayscale image.
 
     Adapted from skimage.feature.blog_dog
@@ -493,7 +495,8 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
         determinant detected the blob.
     References
     ----------
-    .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_determinant_of_the_Hessian
+    .. [1] https://en.wikipedia.org/wiki/Blob_detection#The_
+    determinant_of_the_Hessian
     .. [2] Herbert Bay, Andreas Ess, Tinne Tuytelaars, Luc Van Gool,
            "SURF: Speeded Up Robust Features"
            ftp://ftp.vision.ee.ethz.ch/publications/articles/eth_biwi_00517.pdf
@@ -542,7 +545,7 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
     image = integral_image(image)
 
     # get sequence of sigmas
-    if log_scale:
+    if log_scale is True:
         start, stop = math.log(min_sigma, 10), math.log(max_sigma, 10)
         sigma_list = np.logspace(start, stop, num_sigma)
     else:
@@ -582,13 +585,3 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
 
     # prune blobs that are too close together
     return _prune_blobs(lm, overlap)
-
-
-
-
-
-
-
-
-
-
