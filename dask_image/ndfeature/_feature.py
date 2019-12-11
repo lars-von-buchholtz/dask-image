@@ -1,45 +1,60 @@
 import numpy as np
 import math
-
-
-import dask.array as da
+from functools import wraps
 
 from skimage.feature.peak import peak_local_max as ski_peak_local_max
 from skimage.feature._hessian_det_appx import _hessian_matrix_det
-
-from ..ndfilters._gaussian import gaussian_laplace, gaussian_filter
 from ._skimage_utils import _prune_blobs
-from functools import wraps
 from skimage.transform import integral_image
 
+import dask.array as da
+
+from ..ndfilters._gaussian import gaussian_laplace, gaussian_filter
+
+
 def output2ndarray(func):
+    """decorator to convert output to numpy array
+
+    this is needed for the _hessian_matrix_det function that outputs
+    a memoryview"""
+
     @wraps(func)
     def wrapped(*args,**kwargs):
         return np.asarray(func(*args,**kwargs))
     return wrapped
 
+# modify hessian determinant approximation function to output numpy array
 _hessian_matrix_det = output2ndarray(_hessian_matrix_det)
 
-def _daskarray_to_float(image):
 
-    image = da.asarray(image)
+def _daskarray_to_float(image):
+    """helper function to convert dask integer arrays to float"""
+
+    image = da.asarray(image) # make sure image is a dask array
+
+    #get array type, kind and itemsize
     dtypeobj_in = image.dtype
     dtype_in = dtypeobj_in.type
     kind_in = dtypeobj_in.kind
     itemsize_in = dtypeobj_in.itemsize
 
+    # if input was already float, just return it
     if kind_in == "f":
         return image
 
+    # get min and max values captured by the input format
     if kind_in in "ui":
         imin_in = np.iinfo(dtype_in).min
         imax_in = np.iinfo(dtype_in).max
 
+    # get the smallest float format that captures the size of the input
     dtype_out = next(
         dt
         for dt in [np.float16, np.float32, np.float64]
         if np.dtype(dt).itemsize >= itemsize_in
     )
+
+    #convert image to output format (float)
     image = image.astype(dtype_out)
 
     if kind_in == "u":
@@ -56,37 +71,41 @@ def _daskarray_to_float(image):
 
 def _exclude_border(mask, exclude_border):
     """
-    Remove peaks near the borders
+    Helper function to remove peaks near the borders
     """
 
+    # if a scalar is provided, expand it to the mask image dimension
     exclude_border = (exclude_border,) * mask.ndim if np.isscalar(
         exclude_border) \
         else exclude_border
 
+    # if the wrong size sequence is provided, raise an error
     if len(exclude_border) != mask.ndim:
         raise ValueError("exclude_border has to be boolean, int scalar\
          or a sequence of length: number of dimensions of the image")
 
+    # build a filter for the border by zero-padding a center dask array of ones
     center_dim = tuple(np.subtract(mask.shape, [2 * i for i in exclude_border]))
     borders = tuple([(i,) * 2 for i in exclude_border])
     border_filter = da.pad(da.ones(center_dim), borders, 'constant')
 
     assert border_filter.shape == mask.shape
 
+    # filter the input mask by the border filter
     return mask * border_filter
 
 
 def _get_high_intensity_peaks(image, mask, num_peaks):
     """
-    Return the highest intensity peak coordinates.
+    Helper function to return the num_peaks highest intensity peak coordinates.
 
-    Adapted from skimage.feature.peak._get_high_intensity_peaks
+    Adapted to dask from skimage.feature.peak._get_high_intensity_peaks
     """
     # get coordinates of peaks
-    coord = np.vstack([c.compute() for c in da.nonzero(mask)]).T
+    coord = tuple([c.compute() for c in da.nonzero(mask)])
 
     # sort by peak
-    intensities = get_multiple_pixels(image, coord)
+    intensities = _get_multiple_pixels(image, coord)
     idx_maxsort = np.argsort(intensities)
     coord = coord[idx_maxsort]
 
@@ -94,20 +113,20 @@ def _get_high_intensity_peaks(image, mask, num_peaks):
     if coord.shape[0] > num_peaks:
         coord = coord[-num_peaks:]
 
-    # Highest peak first
+    # return highest peak first
     return coord[::-1]
 
-def get_multiple_pixels(image,coordinates):
-    """function to substitute fancy indexing in dask"""
+def _get_multiple_pixels(image,coordinates):
+    """function to substitute fancy indexing in dask
+
+    Dask doesn't incorporate fancy indexing.
+    Therefore, we have to resort to this implementation.
+    """
     results = []
     for coord in coordinates:
         results.append(image[tuple(coord)].compute())
     return results
 
-def set_multiple_pixels(image,coordinates,value):
-    for coord in coordinates:
-        image[tuple(coord)] = value
-    return image
 
 def peak_local_max(
     image,
@@ -120,13 +139,13 @@ def peak_local_max(
 ):
 
     """Find peaks in a dask image as coordinate list or boolean mask.
+
+    Adapted from scikit-image for dask.
     Peaks are the local maxima in a region of `2 * min_distance + 1`
     (i.e. peaks are separated by at least `min_distance`).
     If there are multiple local maxima with identical pixel intensities
     inside the region defined with `min_distance`,
     the coordinates of all such pixels are returned.
-    If both `threshold_abs` and `threshold_rel` are provided, the maximum
-    of the two is chosen as the minimum intensity threshold of peaks.
     Parameters
     ----------
     image : n-dimensional dask array
@@ -167,13 +186,6 @@ def peak_local_max(
         * If `indices = False` : Boolean dask array shaped like `image`,
         with peaks
           represented by True values.
-    Notes
-    -----
-    The peak local maximum function returns the coordinates of local peaks
-    (maxima) in an image. A maximum filter is used for finding local maxima.
-    This operation dilates the original image. After comparison of the dilated
-    and original image, this function returns the coordinates or a mask of the
-    peaks where the dilated image equals the original image.
 
     Examples
     --------
@@ -199,16 +211,20 @@ def peak_local_max(
     array([[10, 10, 10]])
     """
 
-    # calculate depth based on min_distance and/or footprint
+    # calculate depth based on min_distance or footprint
     if not (min_distance or footprint):
         raise ValueError("Either min_distance or footprint must be specified")
 
+    # get minimum chunk size along each axis as a lower bound for the depth
+    # of the overlap
     min_chunks = [min(d) for d in image.chunks]
+
     if type(footprint) is np.ndarray:
         depth = tuple(np.minimum(footprint.shape,min_chunks).tolist())
     else:
         depth = tuple(np.minimum((2 * min_distance + 1,) * image.ndim,min_chunks).tolist())
-    # map_overlap plm without border exclude, labels, indices=False
+
+    # map_overlap the skimage function to the dask array chunks
     mask = image.map_overlap(
         ski_peak_local_max,
         depth=depth,
@@ -229,10 +245,11 @@ def peak_local_max(
     if exclude_border:
         mask = _exclude_border(mask, exclude_border)
 
-    # Select highest intensities (num_peaks)
+    # output as mask
     if indices is False:
         return mask
 
+    # Output as coordinates: select the `num_peaks` highest intensities
     coordinates = _get_high_intensity_peaks(image, mask, num_peaks)
     return coordinates
 
@@ -241,7 +258,9 @@ def peak_local_max(
 
 def blob_common(blob_func):
     """Decorator for functionality that is conserved between blob_log and
-    blob_dog"""
+    blob_dog
+
+    some code adapted from scikit-image"""
 
     @wraps(blob_func)
     def wrapped_func(
@@ -255,6 +274,7 @@ def blob_common(blob_func):
         log_scale=False,
         exclude_border=False,
     ):
+
 
         scalar_sigma = (
             True if np.isscalar(max_sigma) and np.isscalar(min_sigma)
@@ -272,9 +292,11 @@ def blob_common(blob_func):
         min_sigma = np.asarray(min_sigma, dtype=float)
         max_sigma = np.asarray(max_sigma, dtype=float)
 
-        #
+        # convert integers to float if applicable
         image = _daskarray_to_float(image)
 
+        # apply the specific transformation function (e.g. Laplacian of
+        # Gaussian)
         image_stack, sigma_list = blob_func(
             image=image,
             min_sigma=min_sigma,
@@ -284,6 +306,7 @@ def blob_common(blob_func):
             log_scale=log_scale,
         )
 
+        # collapse the sigma dimension of the image stack
         chunk_shape = image_stack.chunks
         new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
         image_stack = image_stack.rechunk(chunks=new_shape)
@@ -292,9 +315,8 @@ def blob_common(blob_func):
         exclude_border = (exclude_border,) * image.ndim + (0,)
         local_maxima = peak_local_max(
             image_stack,
-            threshold_abs=threshold,
+            threshold=threshold,
             footprint=np.ones((3,) * (image.ndim + 1)),
-            threshold_rel=0.0,
             exclude_border=exclude_border,
         )
 
@@ -312,7 +334,6 @@ def blob_common(blob_func):
         if scalar_sigma:
             # select one sigma column, keeping dimension
             sigmas_of_peaks = sigmas_of_peaks[:, 0:1]
-
         # Remove sigma index and replace with sigmas
         lm = np.hstack([lm[:, :-1], sigmas_of_peaks])
 
@@ -639,9 +660,8 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
     new_shape = chunk_shape[:-1] + ((sum(chunk_shape[-1]),),)
     image_stack = image_stack.rechunk(chunks=new_shape)
 
-    local_maxima = peak_local_max(image_stack, threshold_abs=threshold,
+    local_maxima = peak_local_max(image_stack, threshold=threshold,
                                   footprint=np.ones((3,) * image_stack.ndim),
-                                  threshold_rel=0.0,
                                   exclude_border=False)
 
     # Catch no peaks
