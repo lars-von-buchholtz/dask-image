@@ -44,7 +44,7 @@ def _daskarray_to_float(image):
     # get the smallest float format that captures the size of the input
     dtype_out = next(
         dt
-        for dt in [np.float16, np.float32, np.float64]
+        for dt in [np.float32, np.float64]
         if np.dtype(dt).itemsize >= itemsize_in
     )
 

@@ -217,3 +217,8 @@ def test_blob_log_2d(
     ski_r = sort_array(ski_r)
     da_r = sort_array(da_r)
     dau.assert_eq(ski_r, da_r)
+
+def test_2d_check():
+    img = np.ones((10,10,10))
+    with pytest.raises(ValueError):
+        da_feat.blob_doh(img)

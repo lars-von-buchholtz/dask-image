@@ -100,10 +100,6 @@ def peak_local_max(
     array([[10, 10, 10]])
     """
 
-    # calculate depth based on min_distance or footprint
-    if not (min_distance or footprint):
-        raise ValueError("Either min_distance or footprint must be specified")
-
     # get minimum chunk size along each axis as a lower bound for the depth
     # of the overlap on that axis
     min_chunks = [min(d) for d in image.chunks]
