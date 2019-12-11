@@ -10,6 +10,7 @@ import dask.array as da
 import dask.array.utils as dau
 
 from dask_image.ndfeature import peak_local_max as da_plm
+from dask_image.ndfeature._utils import _daskarray_to_float
 from skimage.feature import peak_local_max as ski_plm
 
 
@@ -22,6 +23,22 @@ def make_img(shape, points):
         coord = points[:, :-1].astype(np.int).T
         img[tuple(coord)] = points[:, -1]
     return img
+
+
+@pytest.mark.parametrize("in_type, out_type", [(np.float16, np.float16),
+                                               (np.float32, np.float32),
+                                               (np.float32, np.float32),
+                                               (np.uint8, np.float16),
+                                               (np.uint16, np.float16),
+                                               (np.uint32, np.float32),
+                                               (np.int8, np.float16),
+                                               (np.int16, np.float16),
+                                               (np.int32, np.float32)
+                                               ])
+def test_tofloat(in_type, out_type):
+    img = da.from_array(np.ones((5, 5), dtype=in_type))
+    img_out = _daskarray_to_float(img)
+    assert img_out.dtype == out_type
 
 
 @pytest.mark.parametrize(
