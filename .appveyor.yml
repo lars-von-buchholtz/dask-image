@@ -3,7 +3,7 @@ platform:
 
 branches:
   only:
-    - master
+    - develop
 
 environment:
   matrix:
