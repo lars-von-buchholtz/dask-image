@@ -451,7 +451,7 @@ def blob_dog(image, min_sigma, max_sigma, sigma_ratio, num_sigma=0,  log_scale=F
     ]
 
     # stack transformed images along new sigma dimension
-    image_stack = np.stack(dog_images, axis=-1)
+    image_stack = da.stack(dog_images, axis=-1)
 
     return image_stack, sigma_list
 
