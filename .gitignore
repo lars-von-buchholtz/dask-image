@@ -68,3 +68,5 @@ target/
 
 junk.py
 scratch_2.py
+
+*.ipynb
