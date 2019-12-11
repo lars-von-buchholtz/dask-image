@@ -18,31 +18,158 @@ assert dask
 
 
 def generate_blobimage(shape, blobs):
-    """function to generate blob images
-
+    """function to generate blob images from an image shape and blob coordinates and sigmas
 
     :param shape:shape of image to generate
-    :param blobs: array with blob coordinates and sigma as rows"""
+    :param blobs: array with blob coordinates and sigma in last column"""
 
     img = np.zeros(shape, dtype=np.float)
     if blobs is None:
         return img
     for blob in blobs:
         tmp_img = np.zeros(shape, dtype=np.float)
-        tmp_img[blob[:-1]] = 1.0
+        tmp_img[tuple(blob[:-1])] = 1.0
         gaussian_filter(tmp_img, blob[-1], output=tmp_img)
+        tmp_img = tmp_img / np.max(tmp_img)
         img += tmp_img
     return img
 
 
+def sort_array(a):
+    a = a[a[:, 1].argsort(kind="mergesort")]
+    a = a[a[:, 0].argsort(kind="mergesort")]
+    return a
+
+
 @pytest.mark.parametrize(
-    "da_func,ski_func",
+    "shape, chunks, blobs", [((60, 30, 30), (30, 30, 30),
+                              np.array([[10, 10, 10, 3]]))]
+)
+def test_blob_log_3d(shape, chunks, blobs):
+
+    a = generate_blobimage(shape, blobs)
+    d = da.from_array(a, chunks=chunks)
+    ski_r = ski_feat.blob_log(a, min_sigma=1, max_sigma=4, num_sigma=4)
+
+    da_r = da_feat.blob_log(d, min_sigma=1, max_sigma=4, num_sigma=4)
+
+    ski_r = sort_array(ski_r)
+    da_r = sort_array(da_r)
+    dau.assert_eq(ski_r, da_r)
+
+
+@pytest.mark.parametrize(
+    "shape, chunks, blobs", [((60, 30, 30), (30, 30, 30),
+                              np.array([[10, 10, 10, 3]]))]
+)
+def test_blob_dog_3d(shape, chunks, blobs):
+    a = generate_blobimage(shape, blobs)
+    d = da.from_array(a, chunks=chunks)
+    ski_r = ski_feat.blob_dog(a, min_sigma=1, max_sigma=4, threshold=0.000001)
+
+    da_r = da_feat.blob_dog(d, min_sigma=1, max_sigma=4, threshold=0.000001)
+
+    ski_r = sort_array(ski_r)
+    da_r = sort_array(da_r)
+    dau.assert_eq(ski_r, da_r)
+
+
+@pytest.mark.parametrize(
+    "shape, blobs",
     [
-        (da_feat.blob_log, ski_feat.blob_log),
-        (da_feat.blob_dog, ski_feat.blob_dog),
-        (da_feat.blob_doh, ski_feat.blob_doh),
+        ((100, 200), None),
+        ((100, 200), np.array([[25, 25, 5]])),
+        ((100, 200), np.array([[25, 25, 5], [49, 99, 10]])),
     ],
 )
+@pytest.mark.parametrize("min_sigma, max_sigma, num_sigma",
+                         [(1, 10, 10), (2, 11, 10)])
+@pytest.mark.parametrize("threshold", [0.001, 0.9])
+@pytest.mark.parametrize("overlap", [0.1])
+@pytest.mark.parametrize("log_scale", [True])
+def test_blob_doh_2d(
+    shape, blobs, min_sigma, max_sigma, num_sigma, overlap,
+    threshold, log_scale
+):
+    a = generate_blobimage(shape, blobs)
+    chunks = [e // 2 for e in shape]
+    d = da.from_array(a, chunks=chunks)
+    ski_r = ski_feat.blob_doh(
+        a,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        num_sigma=num_sigma,
+        threshold=threshold,
+        overlap=overlap,
+        log_scale=log_scale,
+    )
+
+    da_r = da_feat.blob_doh(
+        d,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        num_sigma=num_sigma,
+        threshold=threshold,
+        overlap=overlap,
+        log_scale=log_scale,
+    )
+
+    ski_r = sort_array(ski_r)
+    da_r = sort_array(da_r)
+    print(ski_r)
+    print(da_r)
+    # coordinates are sometimes off by 1 when using the determinant
+    coord_diff = (ski_r - da_r)[:, : a.ndim]
+    sigma_diff = (ski_r - da_r)[:, a.ndim :]
+    assert np.all(coord_diff <= 1)
+    assert np.all(np.abs(sigma_diff) <= 0.01)
+
+
+@pytest.mark.parametrize(
+    "shape, blobs",
+    [
+        ((100, 200), None),
+        ((100, 200), np.array([[50, 50, 5]])),
+        ((100, 200), np.array([[50, 50, 5], [49, 99, 6]])),
+        ((100, 200), np.array([[50, 50, 5], [49, 99, 6], [52, 102, 3]])),
+    ],
+)
+@pytest.mark.parametrize(
+    "min_sigma, max_sigma, sigma_ratio",
+    [(1, 10, 1.6), (2, 7, 2.0), ([1, 1], [10, 10], 1.6)],
+)
+@pytest.mark.parametrize("threshold", [0.001, 0.9])
+@pytest.mark.parametrize("overlap", [0.1, 0.9])
+def test_blob_dog_2d(
+    shape, blobs, min_sigma, max_sigma, sigma_ratio, overlap, threshold
+):
+    a = generate_blobimage(shape, blobs)
+    chunks = [e // 2 for e in shape]
+    d = da.from_array(a, chunks=chunks)
+    ski_r = ski_feat.blob_dog(
+        a,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        sigma_ratio=sigma_ratio,
+        threshold=threshold,
+        overlap=overlap,
+    )
+
+    print(ski_r)
+    da_r = da_feat.blob_dog(
+        d,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        sigma_ratio=sigma_ratio,
+        threshold=threshold,
+        overlap=overlap,
+    )
+
+    ski_r = sort_array(ski_r)
+    da_r = sort_array(da_r)
+    dau.assert_eq(ski_r, da_r)
+
+
 @pytest.mark.parametrize(
     "shape, blobs",
     [
@@ -53,63 +180,39 @@ def generate_blobimage(shape, blobs):
     ],
 )
 @pytest.mark.parametrize(
-    "min_sigma, max_sigma, num_sigma, sigma_ratio",
-    [
-        (1, None),
-        (5, None),
-        (1, np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])),
-        (1, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])),
-    ],
+    "min_sigma, max_sigma, num_sigma",
+    [(1, 10, 10), (2, 11, 10), ([1, 1], [10, 10], 10)],
 )
-@pytest.mark.parametrize("threshold", [0.001, 0.1, 0.9])
-@pytest.mark.parametrize("overlap", [0.1, 0.5, 0.9])
+@pytest.mark.parametrize("threshold", [0.001, 0.9])
+@pytest.mark.parametrize("overlap", [0.1, 0.9])
 @pytest.mark.parametrize("log_scale", [True, False])
-def test_peak_local_max_2d(
-    shape, blobs, min_distance, footprint, threshold_abs, num_peaks
+def test_blob_log_2d(
+    shape, blobs, min_sigma, max_sigma, num_sigma, overlap, threshold, log_scale
 ):
-    a = make_img(shape, points)
+    a = generate_blobimage(shape, blobs)
     chunks = [e // 2 for e in shape]
     d = da.from_array(a, chunks=chunks)
-    ski_r = ski_plm(
+    ski_r = ski_feat.blob_log(
         a,
-        min_distance=min_distance,
-        threshold_abs=threshold_abs,
-        footprint=footprint,
-        num_peaks=num_peaks,
-        exclude_border=False,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        num_sigma=num_sigma,
+        threshold=threshold,
+        overlap=overlap,
+        log_scale=log_scale,
     )
-    # sort the arrays
-    ski_r = ski_r[ski_r[:, 1].argsort(kind="mergesort")]
-    ski_r = ski_r[ski_r[:, 0].argsort(kind="mergesort")]
-    da_r = da_plm(
+
+    da_r = da_feat.blob_log(
         d,
-        min_distance=min_distance,
-        threshold=threshold_abs,
-        footprint=footprint,
-        num_peaks=num_peaks,
-        exclude_border=False,
+        min_sigma=min_sigma,
+        max_sigma=max_sigma,
+        num_sigma=num_sigma,
+        threshold=threshold,
+        overlap=overlap,
+        log_scale=log_scale,
     )
-    da_r = da_r[da_r[:, 1].argsort(kind="mergesort")]
-    da_r = da_r[da_r[:, 0].argsort(kind="mergesort")]
+
+    ski_r = sort_array(ski_r)
+    da_r = sort_array(da_r)
     dau.assert_eq(ski_r, da_r)
 
-
-# def test_2d():
-
-# test 0,1,2,3 blobs are detected with single sigma
-
-# test a few sigma ranges
-
-# test 2 blobs are detected with symmetric sequence sigma
-
-# test num sigma = 1, for blob_log only
-
-# test sigma ratio values for blob_dog only
-
-# test log_scale works
-
-# test overlap eliminates a blob and leaves other intact
-
-# test exclude border eliminates blobs
-
-# test 3D and 4D
