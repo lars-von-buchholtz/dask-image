@@ -10,9 +10,10 @@ import dask.array as da
 import dask.array.utils as dau
 
 from dask_image.ndfeature import peak_local_max as da_plm
-from dask_image.ndfeature._utils import _daskarray_to_float
-from skimage.feature import peak_local_max as ski_plm
+from dask_image.ndfeature._utils import _daskarray_to_float, _exclude_border
+from dask_image.ndfeature._skimage_utils import _prune_blobs
 
+from skimage.feature import peak_local_max as ski_plm
 
 assert dask
 
@@ -25,14 +26,24 @@ def make_img(shape, points):
     return img
 
 
-@pytest.mark.parametrize("in_type, out_type", [(np.float16, np.float16),
+@pytest.mark.parametrize("blobs", [np.array([[10, 10, 5], [15, 15, 5]]),
+                                   np.array([[10, 10, 10, 5],
+                                            [15, 15, 15, 5]]),
+                                   np.array([[10, 10, 10, 10, 5],
+                                            [15, 15, 15, 15, 5]])])
+@pytest.mark.parametrize("overlap", [0.9])
+def test_prune_blobs(blobs, overlap):
+    out = _prune_blobs(blobs, overlap)
+    assert np.all(blobs == out)
+
+
+@pytest.mark.parametrize("in_type, out_type", [(np.float64, np.float64),
                                                (np.float32, np.float32),
-                                               (np.float32, np.float32),
-                                               (np.uint8, np.float16),
-                                               (np.uint16, np.float16),
+                                               (np.uint8, np.float32),
+                                               (np.uint16, np.float32),
                                                (np.uint32, np.float32),
-                                               (np.int8, np.float16),
-                                               (np.int16, np.float16),
+                                               (np.int8, np.float32),
+                                               (np.int16, np.float32),
                                                (np.int32, np.float32)
                                                ])
 def test_tofloat(in_type, out_type):
@@ -188,3 +199,10 @@ def test_peak_local_max_nd(
     da_r = da_r[da_r[:, 1].argsort(kind="mergesort")]
     da_r = da_r[da_r[:, 0].argsort(kind="mergesort")]
     dau.assert_eq(ski_r, da_r)
+
+
+def test_dim_check_exclude_border():
+    mask = np.ones((5, 5, 5), dtype=np.bool)
+    exclude = (2, 2)
+    with pytest.raises(ValueError):
+        _exclude_border(mask, exclude)
