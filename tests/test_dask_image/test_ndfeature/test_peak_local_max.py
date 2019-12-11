@@ -19,7 +19,7 @@ assert dask
 
 
 def make_img(shape, points):
-    img = np.zeros(shape, dtype=np.float)
+    img = np.zeros(shape, dtype=np.float32)
     if points is not None:
         coord = points[:, :-1].astype(np.int).T
         img[tuple(coord)] = points[:, -1]
