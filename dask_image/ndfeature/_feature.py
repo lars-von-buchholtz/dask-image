@@ -544,8 +544,6 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
     image = _daskarray_to_float(image)
     image = integral_image(image)
 
-
-
     # get sequence of sigmas
     if log_scale is True:
         start, stop = math.log(min_sigma, 10), math.log(max_sigma, 10)
