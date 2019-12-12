@@ -9,6 +9,11 @@ env:
   - PYVER="37"
   - PYVER="36"
 
+branches:
+  only:
+    - master
+    - develop
+
 install:
   # Install and Configure Miniconda.
   - source .travis_support/install_miniconda.sh
