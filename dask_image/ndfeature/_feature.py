@@ -541,10 +541,10 @@ def blob_doh(image, min_sigma=1, max_sigma=30, num_sigma=10, threshold=0.01,
          2D array')
 
     # get float integral image to compute determinant of hessian
-    image = da.asarray(image, dtype=np.float64, chunks=image.chunks)
+    image = _daskarray_to_float(image)
     image = integral_image(image)
 
-    assert type(image) == da.core.Array
+
 
     # get sequence of sigmas
     if log_scale is True:

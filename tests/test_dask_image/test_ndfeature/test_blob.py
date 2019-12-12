@@ -24,7 +24,7 @@ def generate_blobimage(shape, blobs):
     :param shape:shape of image to generate
     :param blobs: array with blob coordinates and sigma in last column"""
 
-    img = np.zeros(shape, dtype=np.float32)
+    img = np.zeros(shape, dtype=np.float)
     if blobs is None:
         return img
     for blob in blobs:
