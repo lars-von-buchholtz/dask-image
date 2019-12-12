@@ -12,7 +12,6 @@ env:
 branches:
   only:
     - master
-    - develop
 
 install:
   # Install and Configure Miniconda.
