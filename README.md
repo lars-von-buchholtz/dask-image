@@ -9,6 +9,9 @@ Coveralls:
 Appveyor:
 [![Build status](https://ci.appveyor.com/api/projects/status/f04mv9c38sv03eiq?svg=true)](https://ci.appveyor.com/project/lars-von-buchholtz/dask-image)
 
+CircleCI: 
+[![CircleCI](https://circleci.com/gh/lars-von-buchholtz/dask-image/tree/master.svg?style=svg)](https://circleci.com/gh/lars-von-buchholtz/dask-image/tree/master)
+
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
@@ -38,7 +41,8 @@ The `/dask-image/ndfeature/` folder and the `/tests/test_dask_image/test_ndfeatu
 
 ## Demo
 
-A Demo jupyter notebook can be found [here](https://github.com/lars-von-buchholtz/dask-image/blob/master/blob_demo.ipynb).
+A Demo jupyter notebook can be found [here](https://github.com/lars-von-buchholtz/dask-image/blob/master/blob_demo.ipynb) or as an interactive
+[Colab notebook](https://colab.research.google.com/drive/16T20DLNHP696elo9d6y0NuIKyf8Z8MxO).
 
 
 ## Documentation of new functions
