@@ -62,3 +62,10 @@ target/
 
 # pyenv python configuration file
 .python-version
+
+#pycharm .idea folder
+.idea/
+
+junk.py
+scratch_2.py
+

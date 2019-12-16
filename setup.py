@@ -22,24 +22,25 @@ class PyTest(TestCommand):
         sys.exit(pytest.main(self.test_args))
 
 
-with open("README.rst") as readme_file:
+with open("README.md") as readme_file:
     readme = readme_file.read()
 
 with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
 requirements = [
+    "dask >=2.6.0",
     "dask[array] >=0.16.1",
     "numpy >=1.11.3",
     "scipy >=0.19.1",
     "pims >=0.4.1",
+    "scikit-image >=0.15.0",
 ]
 
 test_requirements = [
     "flake8 >=3.4.1",
     "pytest >=3.0.5",
     "pytest-flake8 >=0.8.1",
-    "scikit-image >=0.12.3",
 ]
 
 cmdclasses = {

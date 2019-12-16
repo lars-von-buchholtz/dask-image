@@ -8,7 +8,10 @@ osx_image: xcode9.4
 env:
   - PYVER="37"
   - PYVER="36"
-  - PYVER="35"
+
+branches:
+  only:
+    - master
 
 install:
   # Install and Configure Miniconda.
