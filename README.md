@@ -35,7 +35,7 @@ Install from my forked (public) repo on github:
 
 ## My contributions to Github Repo
 
-The `/dask-image/ndfeature/` folder and the `/tests/test_dask_image/test_ndfeature/` folders were contributed by me. The rest of the package was left unchanged. I will submit a pull request for the CSCI E-29 class to highlight the contributions I made since the forking.
+The `/dask-image/ndfeature/` folder and the `/tests/test_dask_image/test_ndfeature/` folders were contributed by me. The rest of the package was left unchanged. A [pull request for the CSCI E-29 class](https://github.com/lars-von-buchholtz/dask-image/pull/1) highlights the contributions I made since the forking.
 
   After grading of the project, I will change the Readme and submit the state of this repo as a pull request to Dask-Image.
 
